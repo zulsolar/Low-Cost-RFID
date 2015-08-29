@@ -1,0 +1,210 @@
+Imports System
+Imports System.IO.Ports
+Imports System.Data.OleDb
+Public Class Form1
+    Dim Com As String = "Com1"
+    Dim BaudRate As Integer = 9600
+    Dim DataRead As String
+    Dim DataRead2 As String
+    Dim Comport As New SerialPort(Com, BaudRate, Parity.None, 8, StopBits.One)
+    Dim ds As New DataSet()
+    Dim intCurrentIndex As Integer = 0
+    Dim da As New OleDbDataAdapter()
+    Dim conn As New OleDbConnection()
+    Dim dr As OleDbDataReader
+
+    Private Sub Button1_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Button1.Click
+        Try
+            Comport.Open()
+            If Comport.IsOpen Then
+                SerialData.Text = "Connected" & vbCr
+                Console.Write("Connected")
+            End If
+        Catch ex As System.IO.IOException
+            MsgBox(ex.Message)
+            SerialData.Text = "Disconnect" & vbCr
+        End Try
+    End Sub
+
+    Private Sub Form1_FormClosed(ByVal sender As Object, ByVal e As System.Windows.Forms.FormClosedEventArgs) Handles Me.FormClosed
+        If Comport.IsOpen Then
+            Comport.Close()
+        End If
+    End Sub
+
+
+    Private Sub Form1_Load(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles MyBase.Load
+        For Each sp As String In My.Computer.Ports.SerialPortNames
+            ComboBox1.Items.Add(sp)
+
+        Next
+        DBconnect()
+        If Not Comport.IsOpen Then
+            SerialData.Text = "Disconnect" & vbCr
+        End If
+        AddHandler Comport.DataReceived, AddressOf SerialPort1_DataReceived
+    End Sub
+
+    Private Sub SerialPort1_DataReceived(ByVal sender As Object, ByVal e As System.IO.Ports.SerialDataReceivedEventArgs) Handles SerialPort1.DataReceived
+        Dim sp As SerialPort = CType(sender, SerialPort)
+        Dim indata As String = sp.ReadTo(Chr(3)) 'sp.ReadExisting()
+        Console.WriteLine("Data Received:")
+        Console.Write(indata)
+        DataRead = indata
+    End Sub
+
+    Private Sub ComboBox2_SelectionChangeCommitted(ByVal sender As Object, ByVal e As System.EventArgs) Handles ComboBox2.SelectionChangeCommitted
+        Comport.BaudRate = ComboBox2.SelectedItem
+    End Sub
+
+    Private Sub ComboBox1_SelectionChangeCommitted(ByVal sender As Object, ByVal e As System.EventArgs) Handles ComboBox1.SelectionChangeCommitted
+        Com = ComboBox1.SelectedItem
+        Comport.PortName = Com
+    End Sub
+
+    Private Sub Timer1_Tick(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Timer1.Tick
+        If (DataRead <> DataRead2) Then
+            DataRead2 = DataRead 'Mid(DataRead, 2, 10)
+            SerialData.Text = SerialData.Text & vbCrLf + Mid(DataRead2, 2, 10)
+            Tag_id.Text = Mid(DataRead, 2, 10)
+            Console.WriteLine("data=" & DataRead2)
+            Button4_Click(sender, e)
+
+        End If
+    End Sub
+
+    Private Sub Button3_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Button3.Click
+        SerialData.Text = ""
+    End Sub
+
+    Private Sub DBconnect()
+        conn.ConnectionString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & FileSystem.CurDir & "\sample.mdb;User Id=admin;Password=;"
+
+        da.SelectCommand = New OleDbCommand("SELECT ID,Tag_id, Nama,Keterangan,Group,Harga FROM RFID")
+        da.SelectCommand.Connection = conn
+
+        da.UpdateCommand = New OleDbCommand("UPDATE [RFID] SET  [Nama]=@Nama, [Keterangan]=@Keterangan, [Group]=@Group, Harga=" & harga.Text & " WHERE [Tag_id]=@Tag_id")
+        da.UpdateCommand.Connection = conn
+        '  da.UpdateCommand.Parameters.Add("@FirstName", OleDbType.VarChar, 40, "FirstName")
+        '  da.UpdateCommand.Parameters.Add("@LastName", OleDbType.VarChar, 40, "LastName")
+        '  da.UpdateCommand.Parameters.Add("@Location", OleDbType.VarChar, 40, "Location")
+        '  da.UpdateCommand.Parameters.Add("@EmployeeID", OleDbType.Integer, 5, "EmployeeID") '.SourceVersion = DataRowVersion.Original
+        da.UpdateCommand.Parameters.AddWithValue("@Tag_id", Tag_id.Text)
+        da.UpdateCommand.Parameters.AddWithValue("@Nama", Nama.Text)
+        da.UpdateCommand.Parameters.AddWithValue("@Keterangan", Keterangan.Text)
+        da.UpdateCommand.Parameters.AddWithValue("@Group", Group.Text)
+        da.UpdateCommand.Parameters.AddWithValue("@Harga", harga.Text)
+
+
+        da.InsertCommand = New OleDbCommand("INSERT INTO tbl_Master(FirstName, LastName, Location) VALUES(@FirstName,@LastName,@Location)")
+        da.InsertCommand.Connection = conn
+        da.InsertCommand.Parameters.Add("@FirstName", OleDbType.VarChar, 40, "FirstName")
+        da.InsertCommand.Parameters.Add("@LastName", OleDbType.VarChar, 40, "LastName")
+        da.InsertCommand.Parameters.Add("@Location", OleDbType.VarChar, 40, "Location")
+
+        da.DeleteCommand = New OleDbCommand("DELETE FROM tbl_Master WHERE EmployeeID = @EmployeeID")
+        da.DeleteCommand.Connection = conn
+        da.DeleteCommand.Parameters.Add("@EmployeeID", OleDbType.Integer, 5, "EmployeeID")
+
+        da.Fill(ds)
+        ' MsgBox(ds.Tables(0).Rows(0).Item().ToString())
+        conn.Close()
+        If ds.Tables(0).Rows.Count > 0 Then 'Check to see if the table is empty
+            FillFields()
+        End If
+        ' da.DeleteCommand.Dispose()
+        'da.UpdateCommand.Dispose()
+        'da.InsertCommand.Dispose()
+        'da.SelectCommand.Dispose()
+    End Sub
+    Private Sub FillFields()
+        Tag_id.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Tag_id").ToString()
+        Nama.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Nama").ToString()
+        Keterangan.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Keterangan").ToString()
+        Group.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Group").ToString()
+        harga.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Harga").ToString()
+    End Sub
+
+    Private Sub Button4_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Button4.Click
+        'conn = New OleDbConnection("Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & FileSystem.CurDir & "\sample.mdb;User Id=admin;Password=;")
+        Dim strSql As String = "SELECT*FROM RFID WHERE Tag_ID='" & Tag_id.Text & "'"
+        Dim cmd As OleDbCommand = New OleDbCommand(strSql, conn)
+        conn.Open()
+        Dim MyImage As String = Application.StartupPath & "\" & Tag_id.Text & ".jpg"
+        dr = cmd.ExecuteReader
+        PictureBox1.Load(MyImage)
+        ShowMyImage(MyImage, 174, 161)
+
+        While dr.Read()
+            Tag_id.Text = dr.Item("Tag_id")
+            Nama.Text = dr.Item("Nama")
+            Keterangan.Text = dr.Item("Keterangan")
+            Group.Text = dr.Item("Group")
+            ' harga.Text = dr.Item("Harga")
+        End While
+        conn.Close()
+        Dim Item As New ListViewItem
+        With ListView1.Items.Add(Tag_id.Text)
+            .SubItems.Add(Nama.Text)
+            .SubItems.Add(Keterangan.Text)
+            .SubItems.Add(Group.Text)
+            .SubItems.Add(harga.Text)
+        End With
+     
+
+    End Sub
+    Private Sub FillFields_1()
+        Nama.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Nama").ToString()
+        Keterangan.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Keterangan").ToString()
+        Group.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Group").ToString()
+        harga.Text = ds.Tables(0).Rows(intCurrentIndex).Item("Harga").ToString()
+    End Sub
+
+    Private Sub Button5_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Button5.Click
+        Dim strSql As String = "UPDATE [RFID] SET  [Nama]='" & Nama.Text & "', [Keterangan]='" & Keterangan.Text & "', [Group]='" & Group.Text & "', Harga=" & harga.Text & " WHERE [Tag_id]='" & Tag_id.Text & "'"
+        Dim cmd As New OleDbCommand(strSql, conn)
+        Dim Asx As Integer
+        Try
+            conn.Open()
+            Asx = cmd.ExecuteScalar
+            conn.Close()
+            MsgBox(Asx)
+        Catch ex As Exception
+
+            MsgBox(ex.Message)
+
+        End Try
+
+
+    End Sub
+
+    Private MyImage As Bitmap
+
+    Public Sub ShowMyImage(ByVal fileToDisplay As String, ByVal xSize As Integer, _
+                           ByVal ySize As Integer)
+        ' Sets up an image object to be displayed. 
+        If (MyImage IsNot Nothing) Then
+            MyImage.Dispose()
+        End If
+
+        ' Stretches the image to fit the pictureBox. 
+        pictureBox1.SizeMode = PictureBoxSizeMode.StretchImage
+        MyImage = New Bitmap(fileToDisplay)
+        pictureBox1.ClientSize = New Size(xSize, ySize)
+        pictureBox1.Image = CType(MyImage, Image)
+    End Sub
+
+    Private Sub Timer2_Tick(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Timer2.Tick
+        harga.Text = TimeOfDay
+    End Sub
+
+    Private Sub Button6_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Button6.Click
+        Dim i, j As Byte
+        i = rf_request(0, &H52, j)
+        If (i <> 0) Then
+            MsgBox("Request Fail!")
+            Exit Sub
+        End If
+        MsgBox("Request Success")
+    End Sub
+End Class
